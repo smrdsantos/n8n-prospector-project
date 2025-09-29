@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      # Mapeia a porta 5678 do seu computador para a porta do n8n
+      - "5678:5678"
+    environment:
+      # Variáveis de Ambiente Essenciais
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      # Fuso horário (ajustado para você)
+      - GENERIC_TIMEZONE=America/Sao_Paulo
+      # Configuração para persistência de dados (SQLite)
+      - DB_TYPE=sqlite
+      - DB_SQLITE_VACUUM_ON_STARTUP=true
+      # Permite usar bibliotecas externas no Python/Function Nodes
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,qs,request
+    volumes:
+      # Garante que seus workflows e credenciais sejam salvos
+      - ./n8n_data:/home/node/.n8n
+
+volumes:
+  # Define o volume para persistência de dados
+  n8n_data:
