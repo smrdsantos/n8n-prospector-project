@@ -55,7 +55,7 @@ ECHO ^</body^>^</html^> >> startup_info.html
 
 ECHO.
 ECHO Abrindo o Dashboard de Acesso no Chrome...
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" "startup_info.html"
+start "" "startup_info.html"
 
 ECHO.
 ECHO O ambiente completo esta rodando. Feche esta janela para parar o processo.
