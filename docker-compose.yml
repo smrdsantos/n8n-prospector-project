@@ -1,29 +1,60 @@
-
 services:
+  # ------------------------------------
+  # 1. SERVICO DE BANCO DE DADOS (POSTGRESQL)
+  # Este sera seu Data Warehouse de destino (L e T do ELT).
+  # ------------------------------------
+  postgres:
+    image: postgres:15
+    container_name: postgres_wh
+    restart: unless-stopped
+    environment:
+      # Credenciais do Banco (MUDA ESTAS SENHAS!)
+      - POSTGRES_USER=n8n_user
+      - POSTGRES_PASSWORD=!C293112c! # <-- Mude aqui
+      - POSTGRES_DB=n8n_db
+    ports:
+      - "5432:5432" # Porta padrao do PostgreSQL
+    volumes:
+      # Persistencia de dados do banco
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n_user -d n8n_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------
+  # 2. SERVICO N8N (ORQUESTRACAO)
+  # Configuracao para usar o PostgreSQL como backend.
+  # ------------------------------------
   n8n:
     image: n8nio/n8n:latest
-    container_name: n8n
+    container_name: n8n_prospector
     restart: unless-stopped
-    ports:
-      # Mapeia a porta 5678 do seu computador para a porta do n8n
-      - "5678:5678"
     environment:
-      # Variáveis de Ambiente Essenciais
+      # Configuracao do n8n para usar o PostgreSQL
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_DATABASE=n8n_db
+      - DB_POSTGRESDB_USER=n8n_user
+      - DB_POSTGRESDB_PASSWORD=!C293112c! # <-- MUDE PARA A MESMA SENHA ACIMA
+      
+      # Variaveis de ambiente padrao
       - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
-      # Fuso horário (ajustado para você)
       - GENERIC_TIMEZONE=America/Sao_Paulo
-      # Configuração para persistência de dados (SQLite)
-      - DB_TYPE=sqlite
-      - DB_SQLITE_VACUUM_ON_STARTUP=true
-      # Permite usar bibliotecas externas no Python/Function Nodes
-      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,qs,request
+      # Adicionamos 'pandas' aqui para futura integracao Python
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,qs,request,pandas
+    ports:
+      - "5678:5678"
     volumes:
-      # Garante que seus workflows e credenciais sejam salvos
-      - ./n8n_data:/home/node/.n8n
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
-  # Define o volume para persistência de dados
-  n8n_data:
+  postgres_data: # Volume para o banco de dados
+  n8n_data:      # Volume para os workflows e configuracoes do n8n
