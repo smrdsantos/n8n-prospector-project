@@ -1,21 +1,18 @@
 services:
   # ------------------------------------
-  # 1. SERVICO DE BANCO DE DADOS (POSTGRESQL)
-  # Este sera seu Data Warehouse de destino (L e T do ELT).
+  # 1. SERVICO DE BANCO DE DADOS (POSTGRESQL) - DATA WAREHOUSE
   # ------------------------------------
   postgres:
     image: postgres:15
     container_name: postgres_wh
     restart: unless-stopped
     environment:
-      # Credenciais do Banco (MUDA ESTAS SENHAS!)
       - POSTGRES_USER=n8n_user
-      - POSTGRES_PASSWORD=!C293112c! # <-- Mude aqui
+      - POSTGRES_PASSWORD=!C293112c!  # <-- SENHA FORTE APLICADA
       - POSTGRES_DB=n8n_db
     ports:
-      - "5432:5432" # Porta padrao do PostgreSQL
+      - "5432:5432"
     volumes:
-      # Persistencia de dados do banco
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U n8n_user -d n8n_db"]
@@ -25,27 +22,22 @@ services:
 
   # ------------------------------------
   # 2. SERVICO N8N (ORQUESTRACAO)
-  # Configuracao para usar o PostgreSQL como backend.
   # ------------------------------------
   n8n:
     image: n8nio/n8n:latest
     container_name: n8n_prospector
     restart: unless-stopped
     environment:
-      # Configuracao do n8n para usar o PostgreSQL
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_DATABASE=n8n_db
       - DB_POSTGRESDB_USER=n8n_user
-      - DB_POSTGRESDB_PASSWORD=!C293112c! # <-- MUDE PARA A MESMA SENHA ACIMA
-      
-      # Variaveis de ambiente padrao
+      - DB_POSTGRESDB_PASSWORD=!C293112c!  # <-- SENHA FORTE APLICADA
       - N8N_HOST=localhost
       - N8N_PORT=5678
       - N8N_PROTOCOL=http
       - NODE_ENV=production
       - GENERIC_TIMEZONE=America/Sao_Paulo
-      # Adicionamos 'pandas' aqui para futura integracao Python
       - NODE_FUNCTION_ALLOW_EXTERNAL=axios,qs,request,pandas
     ports:
       - "5678:5678"
@@ -55,6 +47,33 @@ services:
       postgres:
         condition: service_healthy
 
+  # ------------------------------------
+  # 3. SERVICO JUPYTERLAB (PYTHON/ANALISE INTERATIVA)
+  # ------------------------------------
+  jupyter:
+    image: jupyter/scipy-notebook:latest
+    container_name: jupyter_analysis
+    restart: unless-stopped
+    environment:
+      - JUPYTER_TOKEN=!C293112c!  # <-- TOKEN DE ACESSO (MESMA SENHA)
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
+
+  # ------------------------------------
+  # 4. SERVICO AIRBYTE (EXTRAÇÃO E CARGA - VISUALIZACAO)
+  # ------------------------------------
+  airbyte-web:
+    image: airbyte/webapp:0.50.37
+    container_name: airbyte_web
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
-  postgres_data: # Volume para o banco de dados
-  n8n_data:      # Volume para os workflows e configuracoes do n8n
+  postgres_data:
+  n8n_data:
+  notebooks:
