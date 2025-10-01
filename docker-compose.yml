@@ -61,17 +61,6 @@ services:
     volumes:
       - ./notebooks:/home/jovyan/work
 
-  # ------------------------------------
-  # 4. SERVICO AIRBYTE (EXTRAÇÃO E CARGA - VISUALIZACAO)
-  # ------------------------------------
-  airbyte-web:
-    image: airbyte/webapp:0.50.37
-    container_name: airbyte_web
-    ports:
-      - "8000:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
 
 volumes:
   postgres_data:
