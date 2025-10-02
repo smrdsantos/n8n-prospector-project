@@ -1,73 +1,61 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 
-:: =================================================================
-:: 1. DEFINE A MENSAGEM DE COMMIT COM DATA E HORA
-:: =================================================================
-for /f "tokens=1-4 delims=/ " %%a in ('date /t') do set DATE_STR=%%c-%%b-%%a
-for /f "tokens=1-2 delims=:" %%a in ('time /t') do set TIME_STR=%%a-%%b
+REM =================================================================
+REM 1) TIMESTAMP E MENSAGEM DE COMMIT (locale-agnostic)
+REM =================================================================
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd_HH-mm\""') do set TS=%%i
+set "COMMIT_MSG=Backup do Ambiente de Dados - %TS%"
 
-set COMMIT_MSG="Backup do Ambiente de Dados - %DATE_STR% as %TIME_STR%"
+echo.
+echo ==========================================================
+echo PARAR AMBIENTE E FAZER BACKUP (fim de dia)
+echo ==========================================================
+echo Commit: "%COMMIT_MSG%"
+echo.
+pause
 
-ECHO.
-ECHO ==========================================================
-ECHO INICIANDO PARADA E BACKUP DO AMBIENTE COMPLETO
-ECHO ==========================================================
-ECHO.
-ECHO Mensagem de Commit: %COMMIT_MSG%
-ECHO.
-PAUSE
-
-:: =================================================================
-:: 2. PARA TODOS OS CONTAINERS DOCKER
-:: =================================================================
-ECHO.
-ECHO --- PARANDO STACK DE DADOS (N8N, POSTGRES, JUPYTER) ---
-D:
-cd "D:\Micro Samuel Atual\Documentos\n8n-project"
+REM =================================================================
+REM 2) PARAR TODOS OS CONTAINERS DOCKER
+REM =================================================================
+echo.
+echo --- PARANDO STACK DE DADOS (N8N, POSTGRES, JUPYTER) ---
+cd /d "D:\Micro Samuel Atual\Documentos\n8n-project"
 docker compose down
-ECHO.
-PAUSE
+if errorlevel 1 echo [AVISO] docker compose down retornou erro (sem impacto para o backup).
+echo.
 
-ECHO.
-ECHO --- PARANDO STACK DE ETL (MAGE) ---
-ECHO Parando e removendo o container 'mage-etl'...
-docker stop mage-etl
-docker rm mage-etl
-ECHO.
-ECHO Todos os servicos foram parados.
-ECHO.
-PAUSE
+echo --- PARANDO STACK DE ETL (MAGE) ---
+echo Parando e removendo o container 'mage-etl'...
+docker stop mage-etl >NUL 2>&1
+docker rm   mage-etl >NUL 2>&1
+echo Todos os servicos foram parados.
+echo.
 
-:: =================================================================
-:: 3. EXECUTA O BACKUP COM GIT
-:: =================================================================
-ECHO.
-ECHO --- INICIANDO BACKUP PARA O GITHUB ---
-ECHO Navegando para a pasta raiz dos projetos...
-D:
-cd "D:\Micro Samuel Atual\documentos"
+REM =================================================================
+REM 3) GIT: ADD/COMMIT/PUSH A PARTIR DA RAIZ DO REPOSITORIO
+REM =================================================================
+echo --- INICIANDO BACKUP PARA O GITHUB ---
+cd /d "D:\Micro Samuel Atual\Documentos"
 
-ECHO Adicionando todas as mudancas dos projetos ao Git...
-git add n8n-project/ Mage-Projetos/
+REM Adiciona todas as mudancas (respeitando o .gitignore da raiz)
+git add -A
 
-ECHO Criando Commit...
-git commit -m %COMMIT_MSG%
-
-:: Verifica se houve algo para commitar. Se nao, o git commit retorna erro.
+REM Tenta commitar; se nao houver mudancas, nao falha o processo
+git commit -m "%COMMIT_MSG%"
 if errorlevel 1 (
-    ECHO.
-    ECHO [ALERTA] Nenhuma mudanca detectada para salvar.
-    GOTO END
+    echo.
+    echo [INFO] Nenhuma mudanca detectada para salvar.
+    goto END
 )
 
-ECHO Enviando backup para o GitHub...
+echo Enviando backup para o GitHub...
 git push
 
 :END
-ECHO.
-ECHO ==========================================================
-ECHO BACKUP CONCLUIDO E AMBIENTE DESLIGADO.
-ECHO ==========================================================
-ECHO.
-PAUSE
+echo.
+echo ==========================================================
+echo BACKUP CONCLUIDO E AMBIENTE DESLIGADO.
+echo ==========================================================
+echo.
+pause
