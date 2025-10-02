@@ -1,4 +1,3 @@
-
 @echo off
 setlocal EnableExtensions
 chcp 65001 >nul
@@ -26,7 +25,7 @@ if "%~1"=="" (
 endlocal & exit /b 0
 
 :exec
-rem Uso: set "DESC=descrição"; call :exec comando arg1 arg2 ...
+rem Uso: set "DESC=descricao"; call :exec comando arg1 arg2 ...
 setlocal
 if not defined DESC set "DESC=(sem descricao)"
 call :log === %DESC% ===
@@ -36,6 +35,22 @@ set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" (
   call :log [ERROR] %DESC% RC=%RC%
   endlocal & exit /b %RC%
+) else (
+  call :log [OK] %DESC%
+)
+endlocal & exit /b 0
+
+:exec_ignore
+rem Uso: set "DESC=descricao"; call :exec_ignore comando arg1 arg2 ...
+rem Sem interrupcao do fluxo quando RC != 0; loga como [SKIP]
+setlocal
+if not defined DESC set "DESC=(sem descricao)"
+call :log === %DESC% ===
+>>"%LOG%" echo CMD: %*
+call %* >>"%LOG%" 2>&1
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+  call :log [SKIP] %DESC% RC=%RC%
 ) else (
   call :log [OK] %DESC%
 )
@@ -89,7 +104,7 @@ rem checar binarios essenciais
 call :require_cmd docker || goto :fail
 call :require_cmd git    || goto :fail
 
-rem cabeçalho (no log e no console)
+rem cabecalho (no log e no console)
 call :log
 call :log ==========================================================
 call :log STOP ENV AND BACKUP - end of day
@@ -113,14 +128,14 @@ set "DESC=Stopping data stack - n8n/postgres/jupyter"
 call :say === %DESC% ===
 call :exec docker compose down || goto :fail
 
-rem parar/remover mage-etl (ignorar erros se nao existir)
+rem parar/remover mage-etl (ignorando erro se nao existir)
 set "DESC=Stopping mage-etl - ignore if not running"
 call :say === %DESC% ===
-call :exec docker stop mage-etl || rem ignore
+call :exec_ignore docker stop mage-etl
 
 set "DESC=Removing mage-etl - ignore if not present"
 call :say === %DESC% ===
-call :exec docker rm mage-etl   || rem ignore
+call :exec_ignore docker rm mage-etl
 
 call :log All services are stopped.
 call :log
