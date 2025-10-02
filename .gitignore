@@ -1,5 +1,4 @@
-# Arquivos de log e banco de dados do n8n que nao devem ser versionados
-n8n_data/*.sqlite
-n8n_data/*.log
-n8n_data/crash.journal
-n8n_data/n8nEventLog-1.log
+/*
+!.gitignore
+!/n8n-project/
+!/Mage-Projetos/
