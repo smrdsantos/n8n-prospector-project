@@ -1,3 +1,4 @@
+
 @echo off
 setlocal EnableExtensions
 chcp 65001 >nul
@@ -8,17 +9,25 @@ if /I "%~1"=="/NOPAUSE" set "NOPAUSE=1"
 
 goto :main
 
-:: =================== utils ===================
+:: =================== utils (sem blocos) ===================
 :log
 rem Uso: call :log [mensagem...]
 setlocal
-if "%~1"=="" ( >>"%LOG%" echo() ) else ( >>"%LOG%" echo %* )
+if "%~1"=="" goto log_blank
+>>"%LOG%" echo %*
+endlocal & exit /b 0
+:log_blank
+>>"%LOG%" echo(
 endlocal & exit /b 0
 
 :say
 rem Uso: call :say [mensagem...]
 setlocal
-if "%~1"=="" ( echo() ) else ( echo %* )
+if "%~1"=="" goto say_blank
+echo %*
+endlocal & exit /b 0
+:say_blank
+echo(
 endlocal & exit /b 0
 
 :maybe_pause
@@ -37,9 +46,8 @@ set "RC=%ERRORLEVEL%"
 if not "%RC%"=="0" (
   call :log [ERROR] %DESC% RC=%RC%
   endlocal & exit /b %RC%
-) else (
-  call :log [OK] %DESC%
 )
+call :log [OK] %DESC%
 endlocal & exit /b 0
 
 :exec_ignore
@@ -98,17 +106,17 @@ set "HTML=%N8N%\startup_info.html"
 set "HTMLTMP=%N8N%\startup_info.%TS%.tmp"
 set "HTMLTS=%N8N%\startup_info.%TS%.html"
 
-rem limpeza de logs HTMLs antigos (opcional)
+rem limpar antigos (opcional)
 forfiles /p "%LOGDIR%" /m start_*.log /d -30 /c "cmd /c del /q @path" >nul 2>&1
 forfiles /p "%N8N%"   /m startup_info.*.html /d -14 /c "cmd /c del /q @path" >nul 2>&1
 
-rem boot marks (console + log)
+rem boot marks
 call :say [BOOT] batch started - %date% %time%
 call :say [BOOT] log file: "%LOG%"
 call :log [BOOT] batch started - %date% %time%
 call :log [BOOT] log file: "%LOG%"
 
-rem sanidade de caminhos
+rem sanidade
 if not exist "%N8N%" (
   call :say [ERRO] pasta nao existe: %N8N%
   call :log [ERRO] pasta nao existe: %N8N%
@@ -120,11 +128,11 @@ if not exist "%MAGE%" (
   goto :fail
 )
 
-rem checar binarios essenciais
+rem binários
 call :require_cmd docker || goto :fail
 call :require_cmd git    || goto :fail
 
-rem cabecalho
+rem header
 call :log
 call :log ==========================================================
 call :log START ENV AND DASHBOARD - ready to work
@@ -141,35 +149,26 @@ call :say Log : "%LOG%"
 call :say
 call :maybe_pause
 
-rem ===== Aguardar Docker responder (até 90s) =====
+rem ===== docker pronto
 set "DESC=Aguardando Docker responder - ate 90s"
 call :say === %DESC% ===
-call :exec call :wait_docker 90 || (
-  rem opcional: tentar abrir Docker Desktop se nao estiver ativo
-  rem start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe" >nul 2>&1
-  call :exec call :wait_docker 90 || goto :fail
-)
-
+call :exec call :wait_docker 90 || goto :fail
 call :log [OK] Docker pronto
 
-rem ===== Subir stack docker-compose (n8n/jupyter/postgres) =====
+rem ===== subir compose
 cd /d "%N8N%"
 set "DESC=Subindo stack - docker compose up -d"
 call :say === %DESC% ===
 call :exec docker compose up -d || goto :fail
 
-rem ===== Mage: criar se nao existir; se existir e estiver parado, iniciar =====
-rem existe container?
+rem ===== mage-etl: criar se não existir, senão startar
 docker inspect mage-etl >nul 2>&1
 if errorlevel 1 (
   set "DESC=Criando container mage-etl"
   call :say === %DESC% ===
-  rem - monta volume do projeto no /home/src; porta 6789; restart policy
-  rem - inicia servidor do projeto "pipeline_inicial"
   call :exec docker run -d --name mage-etl --restart unless-stopped ^
     -p 6789:6789 -v "%MAGE%":/home/src mageai/mageai mage start %MAGE_PROJ_NAME% || goto :fail
 ) else (
-  rem existe; garantir que está rodando
   for /f %%S in ('docker inspect -f "{{.State.Status}}" mage-etl 2^>nul') do set "ST_MAGE=%%S"
   if /I not "%ST_MAGE%"=="running" (
     set "DESC=Iniciando mage-etl - existente"
@@ -180,14 +179,12 @@ if errorlevel 1 (
   )
 )
 
-rem ===== gerar HTML - tabela estilo Docker =====
-rem URLs e portas dos serviços web
+rem ===== gerar HTML
 set "N8N_URL=http://localhost:5678/"
 set "JUPY_URL=http://localhost:8888/"
 set "MAGE_URL=http://localhost:6789/"
 set "PG_DESC=tcp://localhost:5432"
 
-rem Coletar image/status/health (se ausente, variáveis ficam vazias)
 for /f %%I in ('docker inspect -f "{{.Config.Image}}" n8n_prospector 2^>nul') do set "IMG_N8N=%%I"
 for /f %%S in ('docker inspect -f "{{.State.Status}}" n8n_prospector 2^>nul') do set "ST_N8N=%%S"
 for /f %%H in ('docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{end}}" n8n_prospector 2^>nul') do set "HL_N8N=%%H"
@@ -204,7 +201,6 @@ for /f %%I in ('docker inspect -f "{{.Config.Image}}" postgres_wh 2^>nul') do se
 for /f %%S in ('docker inspect -f "{{.State.Status}}" postgres_wh 2^>nul') do set "ST_PG=%%S"
 for /f %%H in ('docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{end}}" postgres_wh 2^>nul') do set "HL_PG=%%H"
 
-rem defaults visuais
 if not defined IMG_N8N  set "IMG_N8N=-"
 if not defined IMG_JUP  set "IMG_JUP=-"
 if not defined IMG_MAGE set "IMG_MAGE=-"
@@ -239,8 +235,8 @@ if exist "%HTMLTMP%" del /q "%HTMLTMP%" >nul 2>&1
 >>"%HTMLTMP%" echo     a:hover{text-decoration:underline}
 >>"%HTMLTMP%" echo     .ok{color:#8ef29b}.warn{color:#ffd166}.bad{color:#ff6b6b}
 >>"%HTMLTMP%" echo     footer{margin-top:14px;opacity:.7;font-size:12px}
->>"%HTMLTMP%" echo   ^/style^>
->>"%HTMLTMP%" echo ^/head^>
+>>"%HTMLTMP%" echo   ^</style^>
+>>"%HTMLTMP%" echo ^</head^>
 >>"%HTMLTMP%" echo ^<body^>
 >>"%HTMLTMP%" echo   ^<h1^>Ambiente de Dados^</h1^>
 >>"%HTMLTMP%" echo   ^<div class='sub'^>Gerado em %TS%^</div^>
@@ -255,12 +251,10 @@ if exist "%HTMLTMP%" del /q "%HTMLTMP%" >nul 2>&1
 >>"%HTMLTMP%" echo ^</body^>
 >>"%HTMLTMP%" echo ^</html^>
 
-rem gravar versões final e timestamp
 copy /y "%HTMLTMP%" "%HTML%"  >nul
 copy /y "%HTMLTMP%" "%HTMLTS%" >nul
 del /q "%HTMLTMP%" >nul 2>&1
 
-rem abrir dashboard
 start "" "%HTML%"
 
 goto :end
@@ -287,7 +281,6 @@ call :log ==========================================================
 call :log STARTUP DONE - services up and dashboard opened
 call :log ==========================================================
 call :log
-call :say
 call :say
 call :say STARTUP DONE - services up and dashboard opened
 call :say
