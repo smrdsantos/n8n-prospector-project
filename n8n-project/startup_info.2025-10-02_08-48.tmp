@@ -15,18 +15,18 @@
     a:hover{text-decoration:underline}
     .ok{color:#8ef29b}.warn{color:#ffd166}.bad{color:#ff6b6b}
     footer{margin-top:14px;opacity:.7;font-size:12px}
-  </style>
-</head>
+  /style>
+/head>
 <body>
   <h1>Ambiente de Dados</h1>
-  <div class='sub'>Gerado em 2025-10-02_09-13</div>
+  <div class='sub'>Gerado em 2025-10-02_08-48</div>
   <table>
     <tr><th>Name</th><th>Image</th><th>Port(s)</th><th>Status</th></tr>
-    <tr><td>n8n_prospector</td><td>n8nio/n8n:latest</td><td><a href='http://localhost:5678/' target='_blank'>5678</a></td><td class='ok'>running </td></tr>
-    <tr><td>jupyter_analysis</td><td>jupyter/scipy-notebook:latest</td><td><a href='http://localhost:8888/' target='_blank'>8888</a></td><td class='ok'>running healthy</td></tr>
-    <tr><td>mage-etl</td><td>mageai/mageai</td><td><a href='http://localhost:6789/' target='_blank'>6789</a></td><td class='ok'>running </td></tr>
-    <tr><td>postgres_wh</td><td>postgres:15</td><td>5432 (TCP)</td><td class='ok'>running healthy</td></tr>
+    <tr><td>n8n_prospector</td><td>n8nio/n8n:latest</td><td><a href='http://localhost:5678/' target='_blank'>5678</a></td><td>running </td></tr>
+    <tr><td>jupyter_analysis</td><td>jupyter/scipy-notebook:latest</td><td><a href='http://localhost:8888/' target='_blank'>8888</a></td><td>running healthy</td></tr>
+    <tr><td>mage-etl</td><td>mageai/mageai</td><td><a href='http://localhost:6789/' target='_blank'>6789</a></td><td>running </td></tr>
+    <tr><td>postgres_wh</td><td>postgres:15</td><td>5432 (TCP)</td><td>running healthy</td></tr>
   </table>
-  <footer>Arquivos gerados: startup_info.html e startup_info.2025-10-02_09-13.html</footer>
+  <footer>Arquivos gerados: startup_info.html e startup_info.2025-10-02_08-48.html</footer>
 </body>
 </html>

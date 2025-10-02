@@ -1,119 +1,301 @@
+
 @echo off
+setlocal EnableExtensions
+chcp 65001>nul
 
-ECHO ==========================================================
-ECHO INICIANDO AMBIENTE COMPLETO DE ENGENHARIA DE DADOS
-ECHO ==========================================================
-ECHO.
+rem --------- args ---------
+set "NOPAUSE="
+if /I "%~1"=="/NOPAUSE" set "NOPAUSE=1"
 
-ECHO Iniciando o Docker Desktop (se nao estiver rodando)...
-start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
-ECHO Aguardando 15 segundos para o Docker inicializar...
-timeout /t 15 /nobreak > NUL
-ECHO Docker deve estar pronto.
-ECHO.
-PAUSE
+goto :main
 
-ECHO.
-ECHO --- INICIANDO STACK DE DADOS (N8N, POSTGRES, JUPYTER) ---
-ECHO Navegando para a pasta do projeto n8n...
-D:
-cd "D:\Micro Samuel Atual\Documentos\n8n-project"
-docker compose up -d
-ECHO.
-ECHO Stack N8N iniciado. Verifique a saida acima.
-ECHO.
-PAUSE
+:: ======================================================================
+:: UTILIT�RIOS
+:: ======================================================================
+:log
+rem Uso: call :log [mensagem...]
+setlocal
+if "%~1"=="" (>>"%LOG%" echo() else (>>"%LOG%" echo %*)
+endlocal & exit /b 0
 
-ECHO.
-ECHO --- INICIANDO STACK DE ETL (MAGE) ---
-ECHO Navegando para a pasta principal do Mage...
-D:
-cd "D:\Micro Samuel Atual\documentos\Mage-Projetos"
+:say
+rem Uso: call :say [mensagem...]
+setlocal
+if "%~1"=="" (echo() else (echo %*)
+endlocal & exit /b 0
 
-ECHO Verificando o container 'mage-etl'...
-docker start mage-etl > NUL 2>&1
-if %errorlevel% equ 0 (
-    ECHO [INFO] Container 'mage-etl' ja existia e foi iniciado.
+:maybe_pause
+if "%NOPAUSE%"=="1" exit /b 0
+pause
+exit /b 0
+
+:exec
+rem Uso: set "DESC=descricao"; call :exec comando arg1 arg2 ...
+setlocal
+if not defined DESC set "DESC=(sem-descricao)"
+call :log === %DESC% ===
+>>"%LOG%" echo CMD: %*
+call %* >>"%LOG%" 2>&1
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+  call :log [ERROR] %DESC% RC=%RC%
+  endlocal & exit /b %RC%
 ) else (
-    ECHO [INFO] Container 'mage-etl' nao encontrado. Criando e iniciando um novo...
-    docker run -d --name mage-etl -p 6789:6789 -v %cd%:/home/src --network n8n-project_default mageai/mageai mage start pipeline_inicial
+  call :log [OK] %DESC%
 )
-ECHO.
-ECHO Stack Mage iniciado. Verifique a saida acima.
-ECHO.
-PAUSE
+endlocal & exit /b 0
 
-ECHO.
-ECHO --- VERIFICANDO STATUS DOS SERVICOS ---
-ECHO Esta etapa pode levar alguns instantes...
+:exec_ignore
+rem Igual ao :exec, mas n�o quebra o fluxo se falhar (loga como [SKIP])
+setlocal
+if not defined DESC set "DESC=(sem-descricao)"
+call :log === %DESC% ===
+>>"%LOG%" echo CMD: %*
+call %* >>"%LOG%" 2>&1
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (call :log [SKIP] %DESC% RC=%RC%) else (call :log [OK] %DESC%)
+endlocal & exit /b 0
 
-:CHECK_N8N
-ECHO Tentando conectar ao N8N (porta 5678)...
-curl --silent --fail http://localhost:5678/ > NUL
-if %errorlevel% equ 0 (
-    ECHO [OK] N8N esta no ar.
-    GOTO CHECK_MAGE
-) else (
-    ECHO N8N ainda nao responde. Aguardando 5 segundos...
-    timeout /t 5 /nobreak > NUL
-    GOTO CHECK_N8N
+:require_cmd
+rem Uso: call :require_cmd docker  |  call :require_cmd git
+setlocal
+where %~1 >nul 2>&1
+if errorlevel 1 (
+  call :say [ERRO] comando nao encontrado: %~1
+  call :log  [ERRO] comando nao encontrado: %~1
+  endlocal & exit /b 1
 )
+endlocal & exit /b 0
 
-:CHECK_MAGE
-ECHO Tentando conectar ao Mage (porta 6789)...
-curl --silent --fail http://localhost:6789/ > NUL
-if %errorlevel% equ 0 (
-    ECHO [OK] Mage esta no ar.
-) else (
-    ECHO Mage ainda nao responde. Aguardando 5 segundos...
-    timeout /t 5 /nobreak > NUL
-    GOTO CHECK_MAGE
+:try_start_docker_desktop
+rem tenta iniciar o Docker Desktop se n�o estiver respondendo
+setlocal
+set "DD1=C:\Program Files\Docker\Docker\Docker Desktop.exe"
+set "DD2=C:\Program Files (x86)\Docker\Docker\Docker Desktop.exe"
+if exist "%DD1%" (start "" "%DD1%") else if exist "%DD2%" (start "" "%DD2%")
+endlocal & exit /b 0
+
+:wait_docker
+rem Uso: call :wait_docker 90   (timeout em segundos)
+setlocal
+set "TIMEOUT=%~1"
+if not defined TIMEOUT set "TIMEOUT=60"
+set /a "COUNT=%TIMEOUT%"
+:wd_loop
+docker info >nul 2>&1 && (endlocal & exit /b 0)
+if %COUNT% LEQ 0 (endlocal & exit /b 1)
+if %COUNT% EQU %TIMEOUT% call :try_start_docker_desktop
+ping -n 2 127.0.0.1 >nul
+set /a COUNT-=1
+goto :wd_loop
+
+:open_html
+rem Uso: call :open_html "caminho\arquivo.html"
+setlocal
+set "F=%~1"
+if not exist "%F%" (
+  call :log [ERRO] HTML nao encontrado: %F%
+  call :say [ERRO] HTML nao encontrado: %F%
+  endlocal & exit /b 1
 )
+ping -n 2 127.0.0.1 >nul
+start "" "%F%" || explorer "%F%"
+call :log [OK] HTML aberto: %F%
+endlocal & exit /b 0
 
-ECHO.
-ECHO [SUCESSO] O Stack de Dados completo esta pronto!
-ECHO.
-PAUSE
+:: ======================================================================
+:: MAIN
+:: ======================================================================
+:main
+rem caminhos-base
+set "ROOT=D:\Micro Samuel Atual\Documentos"
+set "N8N=%ROOT%\n8n-project"
+set "MAGE=%ROOT%\Mage-Projetos"
+set "LOGDIR=%ROOT%\backup_logs"
+if not exist "%LOGDIR%" mkdir "%LOGDIR%"
 
-ECHO.
-ECHO [DEBUG] Preparando para gerar o dashboard...
-ECHO Gerando dashboard de acesso...
+rem timestamp est�vel
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HH-mm"') do set "TS=%%i"
 
-REM ====== GARANTE DIRETORIO CORRETO (Sua sugestao implementada) ======
-cd /d "D:\Micro Samuel Atual\Documentos\n8n-project"
+set "LOG=%LOGDIR%\start_%TS%.log"
+set "HTML=%N8N%\startup_info.html"
+set "HTMLTMP=%N8N%\startup_info.%TS%.tmp"
 
-REM ====== BLOCO DE GERAÇÃO DE HTML ======
-(
-    ECHO ^<html^>^<head^>^<title^>Ambiente de Dados - Acessos^</title^>^</head^>
-    ECHO ^<body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9;"^>
-    ECHO ^<h1 style="color: #007bff;"^>Ambiente de Engenharia de Dados - Acessos^</h1^>
-    ECHO ^<p^>Seu stack Docker (n8n, PostgreSQL, JupyterLab e Mage) esta online!^</p^>
-    ECHO ^<h2 style="color: #333;"^>Detalhes dos Servi^ços:^</h2^>
-    ECHO ^<table border="1" style="width: 80%%; border-collapse: collapse; margin-top: 20px;"^>
-    ECHO ^<tr style="background-color: #e9ecef;"^>^<th style="padding: 10px; text-align: left;"^>Servi^ço^</th^>^<th style="padding: 10px; text-align: left;"^>Fun^ção^</th^>^<th style="padding: 10px; text-align: left;"^>Endere^ço^</th^>^<th style="padding: 10px; text-align: left;"^>Credenciais^</th^>^</tr^>
-    ECHO ^<tr^>^<td style="padding: 10px;"^>Mage^</td^>^<td style="padding: 10px;"^>ETL e Orquestra^ção de Pipelines^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:6789" target="_blank"^>http://localhost:6789^</a^>^</td^>^<td style="padding: 10px;"^>Login com ^<strong^>seu usu^ário Owner^</strong^> (ou admin@admin.com / admin).^</td^>^</tr^>
-    ECHO ^<tr^>^<td style="padding: 10px;"^>n8n^</td^>^<td style="padding: 10px;"^>Automa^ção de Workflows^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:5678" target="_blank"^>http://localhost:5678^</a^>^</td^>^<td style="padding: 10px;"^>Login com ^<strong^>seu usu^ário Owner^</strong^>.^</td^>^</tr^>
-    ECHO ^<tr^>^<td style="padding: 10px;"^>JupyterLab^</td^>^<td style="padding: 10px;"^>An^álise de Dados com Python^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:8888" target="_blank"^>http://localhost:8888^</a^>^</td^>^<td style="padding: 10px;"^>Token: ^<strong^>!C293112c!^</strong^>^</td^>^</tr^>
-    ECHO ^</table^>
-    ECHO ^<p style="margin-top: 30px; font-size: 0.9em; color: #666;"^>^<strong^>Lembrete:^</strong^> Para desligar todo o ambiente, execute o script ^<strong^>stop_ambiente.bat^</strong^>.^</p^>
-    ECHO ^</body^>^</html^>
-) > "dashboard_acessos.html"
+rem limpeza de logs >30d
+forfiles /p "%LOGDIR%" /m start_*.log /d -30 /c "cmd /c del /q @path" >nul 2>&1
 
-ECHO [DEBUG] Bloco de geracao finalizado. Verificando se o arquivo existe...
+rem boot
+call :say [BOOT] batch started - %date% %time%
+call :say [BOOT] log file: "%LOG%"
+call :log [BOOT] batch started - %date% %time%
+call :log [BOOT] log file: "%LOG%"
 
-if exist "dashboard_acessos.html" (
-    ECHO [DEBUG] Dashboard gerado com sucesso em 'D:\Micro Samuel Atual\Documentos\n8n-project\'.
-) else (
-    ECHO [ERRO] Falha na geracao do dashboard! Verifique as permissoes da pasta.
-)
-ECHO.
-PAUSE
+rem sanidade
+if not exist "%N8N%"  (call :say [ERRO] pasta nao existe: %N8N%  & call :log [ERRO] pasta nao existe: %N8N%  & goto :fail)
+call :require_cmd docker || goto :fail
+call :require_cmd git    || goto :fail
 
-ECHO.
-ECHO Abrindo o Dashboard de Acesso no seu navegador...
-start "" "dashboard_acessos.html"
+rem cabe�alho
+call :log
+call :log ==========================================================
+call :log START ENV AND DASHBOARD - ready to work
+call :log ==========================================================
+call :log HTML: "%HTML%"
+call :log Log : "%LOG%"
+call :log
 
-ECHO.
-ECHO O ambiente completo esta rodando.
-ECHO Pressione qualquer tecla para finalizar este script (os containers continuarão rodando em segundo plano).
-PAUSE
+call :say
+call :say START ENV AND DASHBOARD - ready to work
+call :say
+call :say HTML: "%HTML%"
+call :say Log : "%LOG%"
+call :say
+call :maybe_pause
+
+rem aguardar docker
+set "DESC=Aguardando Docker responder - ate 90s"
+call :say === %DESC% ===
+call :exec call :wait_docker 90 || (call :say [ERRO] Docker nao respondeu; veja o log & goto :fail)
+call :log [OK] Docker pronto
+
+rem subir stack (docker compose up -d na pasta do projeto)
+cd /d "%N8N%"
+set "DESC=Subindo stack - docker compose up -d"
+call :say === %DESC% ===
+call :exec docker compose up -d || goto :fail
+
+rem iniciar mage-etl se existir
+set "DESC=Iniciando mage-etl - se existir"
+call :say === %DESC% ===
+docker inspect mage-etl >nul 2>&1 && (call :exec_ignore docker start mage-etl) || (call :log [SKIP] mage-etl nao encontrado)
+
+rem ===== gerar HTML - tabela estilo Docker =====
+rem URLs e portas dos servi�os web
+set "N8N_URL=http://localhost:5678/"
+set "JUPY_URL=http://localhost:8888/"
+set "MAGE_URL=http://localhost:6789/"
+set "PG_DESC=tcp://localhost:5432"
+
+rem Coletar image e status (e health, se existir). Se nao existir, variaveis ficam vazias.
+for /f %%I in ('docker inspect -f "{{.Config.Image}}" n8n_prospector 2^>nul') do set "IMG_N8N=%%I"
+for /f %%S in ('docker inspect -f "{{.State.Status}}" n8n_prospector 2^>nul') do set "ST_N8N=%%S"
+for /f %%H in ('docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{end}}" n8n_prospector 2^>nul') do set "HL_N8N=%%H"
+
+for /f %%I in ('docker inspect -f "{{.Config.Image}}" jupyter_analysis 2^>nul') do set "IMG_JUP=%%I"
+for /f %%S in ('docker inspect -f "{{.State.Status}}" jupyter_analysis 2^>nul') do set "ST_JUP=%%S"
+for /f %%H in ('docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{end}}" jupyter_analysis 2^>nul') do set "HL_JUP=%%H"
+
+for /f %%I in ('docker inspect -f "{{.Config.Image}}" mage-etl 2^>nul') do set "IMG_MAGE=%%I"
+for /f %%S in ('docker inspect -f "{{.State.Status}}" mage-etl 2^>nul') do set "ST_MAGE=%%S"
+for /f %%H in ('docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{end}}" mage-etl 2^>nul') do set "HL_MAGE=%%H"
+
+for /f %%I in ('docker inspect -f "{{.Config.Image}}" postgres_wh 2^>nul') do set "IMG_PG=%%I"
+for /f %%S in ('docker inspect -f "{{.State.Status}}" postgres_wh 2^>nul') do set "ST_PG=%%S"
+for /f %%H in ('docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{end}}" postgres_wh 2^>nul') do set "HL_PG=%%H"
+
+rem tratar defaults visuais
+if not defined IMG_N8N  set "IMG_N8N=-"
+if not defined IMG_JUP  set "IMG_JUP=-"
+if not defined IMG_MAGE set "IMG_MAGE=-"
+if not defined IMG_PG   set "IMG_PG=-"
+
+if not defined ST_N8N  set "ST_N8N=absent"
+if not defined ST_JUP  set "ST_JUP=absent"
+if not defined ST_MAGE set "ST_MAGE=absent"
+if not defined ST_PG   set "ST_PG=absent"
+
+rem montar strings de status (status + health se houver)
+set "TXT_N8N=%ST_N8N% %HL_N8N%"
+set "TXT_JUP=%ST_JUP% %HL_JUP%"
+set "TXT_MAGE=%ST_MAGE% %HL_MAGE%"
+set "TXT_PG=%ST_PG% %HL_PG%"
+
+rem decidir classe de cor por servi�o
+set "CLS_N8N=bad"
+echo %TXT_N8N% | find /I "running">nul && set "CLS_N8N=ok"
+if /I not "%CLS_N8N%"=="ok" echo %TXT_N8N% | findstr /I "starting restarting unhealthy created paused">nul && set "CLS_N8N=warn"
+
+set "CLS_JUP=bad"
+echo %TXT_JUP% | find /I "running">nul && set "CLS_JUP=ok"
+if /I not "%CLS_JUP%"=="ok" echo %TXT_JUP% | findstr /I "starting restarting unhealthy created paused">nul && set "CLS_JUP=warn"
+
+set "CLS_MAGE=bad"
+echo %TXT_MAGE% | find /I "running">nul && set "CLS_MAGE=ok"
+if /I not "%CLS_MAGE%"=="ok" echo %TXT_MAGE% | findstr /I "starting restarting unhealthy created paused">nul && set "CLS_MAGE=warn"
+
+set "CLS_PG=bad"
+echo %TXT_PG% | find /I "running">nul && set "CLS_PG=ok"
+if /I not "%CLS_PG%"=="ok" echo %TXT_PG% | findstr /I "starting restarting unhealthy created paused">nul && set "CLS_PG=warn"
+
+rem escrever HTML em .tmp
+if exist "%HTMLTMP%" del /q "%HTMLTMP%" >nul 2>&1
+
+> "%HTMLTMP%"  echo ^<!doctype html^>
+>>"%HTMLTMP%" echo ^<html lang='pt-br'^>
+>>"%HTMLTMP%" echo ^<head^>
+>>"%HTMLTMP%" echo   ^<meta charset='utf-8'^/^>
+>>"%HTMLTMP%" echo   ^<meta name='viewport' content='width=device-width,initial-scale=1'^/^>
+>>"%HTMLTMP%" echo   ^<title^>Ambiente de Dados - Dashboard^</title^>
+>>"%HTMLTMP%" echo   ^<style^>
+>>"%HTMLTMP%" echo     body{font-family:Segoe UI,Arial,sans-serif;margin:24px;background:#0b1220;color:#e7ebf4}
+>>"%HTMLTMP%" echo     h1{margin:0 0 6px 0;font-size:24px}
+>>"%HTMLTMP%" echo     .sub{opacity:.8;margin-bottom:16px}
+>>"%HTMLTMP%" echo     table{border-collapse:collapse;width:100%%;background:#0f172a;border:1px solid #23304a}
+>>"%HTMLTMP%" echo     th,td{padding:10px 12px;border-bottom:1px solid #23304a;text-align:left}
+>>"%HTMLTMP%" echo     th{background:#111a2b;color:#c6d4f0;font-weight:600}
+>>"%HTMLTMP%" echo     a{color:#a0c7ff;text-decoration:none}
+>>"%HTMLTMP%" echo     a:hover{text-decoration:underline}
+>>"%HTMLTMP%" echo     .ok{color:#8ef29b}.warn{color:#ffd166}.bad{color:#ff6b6b}
+>>"%HTMLTMP%" echo     footer{margin-top:14px;opacity:.7;font-size:12px}
+>>"%HTMLTMP%" echo   ^</style^>
+>>"%HTMLTMP%" echo ^</head^>
+>>"%HTMLTMP%" echo ^<body^>
+>>"%HTMLTMP%" echo   ^<h1^>Ambiente de Dados^</h1^>
+>>"%HTMLTMP%" echo   ^<div class='sub'^>Gerado em %TS%^</div^>
+>>"%HTMLTMP%" echo   ^<table^>
+>>"%HTMLTMP%" echo     ^<tr^>^<th^>Name^</th^>^<th^>Image^</th^>^<th^>Port(s)^</th^>^<th^>Status^</th^>^</tr^>
+>>"%HTMLTMP%" echo     ^<tr^>^<td^>n8n_prospector^</td^>^<td^>%IMG_N8N%^</td^>^<td^>^<a href='%N8N_URL%' target='_blank'^>5678^</a^>^</td^>^<td class='%CLS_N8N%'^>%TXT_N8N%^</td^>^</tr^>
+>>"%HTMLTMP%" echo     ^<tr^>^<td^>jupyter_analysis^</td^>^<td^>%IMG_JUP%^</td^>^<td^>^<a href='%JUPY_URL%' target='_blank'^>8888^</a^>^</td^>^<td class='%CLS_JUP%'^>%TXT_JUP%^</td^>^</tr^>
+>>"%HTMLTMP%" echo     ^<tr^>^<td^>mage-etl^</td^>^<td^>%IMG_MAGE%^</td^>^<td^>^<a href='%MAGE_URL%' target='_blank'^>6789^</a^>^</td^>^<td class='%CLS_MAGE%'^>%TXT_MAGE%^</td^>^</tr^>
+>>"%HTMLTMP%" echo     ^<tr^>^<td^>postgres_wh^</td^>^<td^>%IMG_PG%^</td^>^<td^>5432 (TCP)^</td^>^<td class='%CLS_PG%'^>%TXT_PG%^</td^>^</tr^>
+>>"%HTMLTMP%" echo   ^</table^>
+>>"%HTMLTMP%" echo   ^<footer^>Arquivos gerados: startup_info.html e startup_info.%TS%.html^</footer^>
+>>"%HTMLTMP%" echo ^</body^>
+>>"%HTMLTMP%" echo ^</html^>
+
+rem publicar e abrir
+copy /y "%HTMLTMP%" "%HTML%" >nul
+copy /y "%HTMLTMP%" "%~dp0startup_info.%TS%.html" >nul
+call :open_html "%HTML%"
+
+goto :end
+
+:fail
+call :log
+call :log ==========================================================
+call :log ERROR OCCURRED - see log:
+call :log %LOG%
+call :log ==========================================================
+call :log
+call :say
+call :say ==========================================================
+call :say ERROR OCCURRED - see log:
+call :say %LOG%
+call :say ==========================================================
+call :say
+call :maybe_pause
+exit /b 1
+
+:end
+call :log
+call :log ==========================================================
+call :log STARTUP DONE - services up and dashboard opened
+call :log ==========================================================
+call :log
+call :say
+call :say ==========================================================
+call :say STARTUP DONE - services up and dashboard opened
+call :say ==========================================================
+call :say
+call :maybe_pause
+exit /b 0

@@ -1,62 +1,111 @@
 @echo off
 SETLOCAL EnableDelayedExpansion
 
+ECHO ==========================================================
+ECHO INICIANDO AMBIENTE COMPLETO DE ENGENHARIA DE DADOS
+ECHO ==========================================================
+ECHO.
+
 ECHO Iniciando o Docker Desktop (se nao estiver rodando)...
 start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+ECHO Aguardando 15 segundos para o Docker inicializar...
+timeout /t 15 /nobreak > NUL
+ECHO Docker deve estar pronto.
+ECHO.
+PAUSE
 
 ECHO.
-ECHO Navegando para a pasta do projeto...
+ECHO --- INICIANDO STACK DE DADOS (N8N, POSTGRES, JUPYTER) ---
+ECHO Navegando para a pasta do projeto n8n...
 D:
 cd "D:\Micro Samuel Atual\Documentos\n8n-project"
-
-ECHO.
-ECHO Iniciando/Garantindo que os containers Docker estejam rodando...
 docker compose up -d
+ECHO.
+ECHO Stack N8N iniciado. Verifique a saida acima.
+ECHO.
+PAUSE
 
 ECHO.
-ECHO --- VERIFICANDO STATUS DO N8N ---
+ECHO --- INICIANDO STACK DE ETL (MAGE) ---
+ECHO Navegando para a pasta principal do Mage...
+D:
+cd "D:\Micro Samuel Atual\documentos\Mage-Projetos"
 
-:STARTUP_CHECK
+ECHO Verificando o container 'mage-etl'...
+docker start mage-etl > NUL 2>&1
+if !errorlevel! equ 0 (
+    ECHO [INFO] Container 'mage-etl' ja existia e foi iniciado.
+) else (
+    ECHO [INFO] Container 'mage-etl' nao encontrado. Criando e iniciando um novo...
+    REM A CORRECAO ESTA AQUI: Adicionadas aspas em "%cd%" para lidar com espacos no caminho
+    docker run -d --name mage-etl -p 6789:6789 -v "%cd%:/home/src" --network n8n-project_default mageai/mageai mage start pipeline_inicial
+)
+ECHO.
+ECHO Stack Mage iniciado. Verifique a saida acima.
+ECHO.
+PAUSE
+
+ECHO.
+ECHO --- VERIFICANDO STATUS DOS SERVICOS ---
+ECHO Esta etapa pode levar alguns instantes...
+
+:CHECK_N8N
 ECHO Tentando conectar ao N8N (porta 5678)...
-:: Tenta se conectar a porta 5678. Curl retorna 0 (sucesso) se conseguir conectar.
 curl --silent --fail http://localhost:5678/ > NUL
-
 if %errorlevel% equ 0 (
-    GOTO SUCCESS
+    ECHO [OK] N8N esta no ar.
+    GOTO CHECK_MAGE
 ) else (
     ECHO N8N ainda nao responde. Aguardando 5 segundos...
     timeout /t 5 /nobreak > NUL
-    GOTO STARTUP_CHECK
+    GOTO CHECK_N8N
 )
 
-:SUCCESS
-ECHO.
-ECHO [SUCESSO] O Stack de Dados esta pronto!
+:CHECK_MAGE
+ECHO Tentando conectar ao Mage (porta 6789)...
+curl --silent --fail http://localhost:6789/ > NUL
+if %errorlevel% equ 0 (
+    ECHO [OK] Mage esta no ar.
+) else (
+    ECHO Mage ainda nao responde. Aguardando 5 segundos...
+    timeout /t 5 /nobreak > NUL
+    GOTO CHECK_MAGE
+)
 
 ECHO.
-ECHO Gerando dashboard de acesso (startup_info.html)...
-
-:: --------------------------------------------------------------------------------
-:: GERA√á√ÉO DO ARQUIVO HTML COM O DASHBOARD DE ACESSO
-:: --------------------------------------------------------------------------------
-ECHO ^<html^>^<head^>^<title^>Ambiente de Dados - Acessos^</title^>^</head^>^<body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9;"^> > startup_info.html
-ECHO ^<h1 style="color: #007bff;"^>Ambiente de Engenharia de Dados - Acessos^</h1^> >> startup_info.html
-ECHO ^<p^>O seu stack Docker (n8n, PostgreSQL, JupyterLab e Airbyte) iniciou com sucesso!^</p^> >> startup_info.html
-ECHO ^<h2 style="color: #333;"^>Detalhes dos Servi^√ßos:^</h2^> >> startup_info.html
-ECHO ^<table border="1" style="width: 80%; border-collapse: collapse; margin-top: 20px;"^> >> startup_info.html
-ECHO ^<tr style="background-color: #e9ecef;"^>^<th style="padding: 10px; text-align: left;"^>Servi^√ßo^</th^>^<th style="padding: 10px; text-align: left;"^>Fun^√ß√£o^</th^>^<th style="padding: 10px; text-align: left;"^>Endere^√ßo^</th^>^<th style="padding: 10px; text-align: left;"^>Credenciais^</th^>^</tr^> >> startup_info.html
-ECHO ^<tr^>^<td style="padding: 10px;"^>n8n^</td^>^<td style="padding: 10px;"^>Orquestra^√ß√£o (Fluxo de Dados)^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:5678" target="_blank"^>http://localhost:5678^</a^>^</td^>^<td style="padding: 10px;"^>Seu e-mail e ^<strong^>senha de propriet^√°rio^</strong^>.^</td^>^</tr^> >> startup_info.html
-ECHO ^<tr^>^<td style="padding: 10px;"^>JupyterLab^</td^>^<td style="padding: 10px;"^>Python/An^√°lise de Dados^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:8888" target="_blank"^>http://localhost:8888^</a^>^</td^>^<td style="padding: 10px;"^>Entrar com o ^<strong^>Token de Acesso^</strong^>.^</td^>^</tr^> >> startup_info.html
-ECHO ^<tr^>^<td style="padding: 10px;"^>Airbyte Web^</td^>^<td style="padding: 10px;"^>Conectores (Extra^√ß√£o/Carga)^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:8000" target="_blank"^>http://localhost:8000^</a^>^</td^>^<td style="padding: 10px;"^>(Acesso direto via navegador)^</td^>^</tr^> >> startup_info.html
-ECHO ^</table^> >> startup_info.html
-ECHO ^<p style="margin-top: 30px; font-size: 0.9em; color: #666;"^>^<strong^>Lembrete:^</strong^> O Token do JupyterLab ^√© o mesmo que a sua senha forte do banco de dados.^</p^> >> startup_info.html
-ECHO ^<p style="margin-top: 20px; font-size: 0.9em; color: #666;"^>Para desligar o ambiente, retorne ^√† janela do PowerShell e pressione Ctrl+C, ou feche a janela do terminal.^</p^> >> startup_info.html
-ECHO ^</body^>^</html^> >> startup_info.html
+ECHO [SUCESSO] O Stack de Dados completo esta pronto!
+ECHO.
+PAUSE
 
 ECHO.
-ECHO Abrindo o Dashboard de Acesso no Chrome...
-start "" "startup_info.html"
+ECHO Gerando dashboard de acesso...
+cd /d "D:\Micro Samuel Atual\Documentos\n8n-project"
+
+(
+    ECHO ^<html^>^<head^>^<title^>Ambiente de Dados - Acessos^</title^>^</head^>
+    ECHO ^<body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f4f4f9;"^>
+    ECHO ^<h1 style="color: #007bff;"^>Ambiente de Engenharia de Dados - Acessos^</h1^>
+    ECHO ^<p^>Seu stack Docker (n8n, PostgreSQL, JupyterLab e Mage) esta online!^</p^>
+    ECHO ^<h2 style="color: #333;"^>Detalhes dos Servi^Áos:^</h2^>
+    ECHO ^<table border="1" style="width: 80%%; border-collapse: collapse; margin-top: 20px;"^>
+    ECHO ^<tr style="background-color: #e9ecef;"^>^<th style="padding: 10px; text-align: left;"^>Servi^Áo^</th^>^<th style="padding: 10px; text-align: left;"^>Fun^Á„o^</th^>^<th style="padding: 10px; text-align: left;"^>Endere^Áo^</th^>^<th style="padding: 10px; text-align: left;"^>Credenciais^</th^>^</tr^>
+    ECHO ^<tr^>^<td style="padding: 10px;"^>Mage^</td^>^<td style="padding: 10px;"^>ETL e Orquestra^Á„o de Pipelines^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:6789" target="_blank"^>http://localhost:6789^</a^>^</td^>^<td style="padding: 10px;"^>Login com ^<strong^>seu usu^·rio Owner^</strong^> (ou admin@admin.com / admin).^</td^>^</tr^>
+    ECHO ^<tr^>^<td style="padding: 10px;"^>n8n^</td^>^<td style="padding: 10px;"^>Automa^Á„o de Workflows^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:5678" target="_blank"^>http://localhost:5678^</a^>^</td^>^<td style="padding: 10px;"^>Login com ^<strong^>seu usu^·rio Owner^</strong^>.^</td^>^</tr^>
+    ECHO ^<tr^>^<td style="padding: 10px;"^>JupyterLab^</td^>^<td style="padding: 10px;"^>An^·lise de Dados com Python^</td^>^<td style="padding: 10px;"^>^<a href="http://localhost:8888" target="_blank"^>http://localhost:8888^</a^>^</td^>^<td style="padding: 10px;"^>Token: ^<strong^>!C293112c!^</strong^>^</td^>^</tr^>
+    ECHO ^</table^>
+    ECHO ^<p style="margin-top: 30px; font-size: 0.9em; color: #666;"^>^<strong^>Lembrete:^</strong^> Para desligar todo o ambiente, execute o script ^<strong^>stop_ambiente.bat^</strong^>.^</p^>
+    ECHO ^</body^>^</html^>
+) > "dashboard_acessos.html"
+
+ECHO Dashboard gerado em 'D:\Micro Samuel Atual\Documentos\n8n-project\'.
+ECHO.
+PAUSE
 
 ECHO.
-ECHO O ambiente completo esta rodando. Feche esta janela para parar o processo.
+ECHO Abrindo o Dashboard de Acesso no seu navegador...
+start "" "dashboard_acessos.html"
+
+ECHO.
+ECHO O ambiente completo esta rodando.
+ECHO Pressione qualquer tecla para finalizar este script (os containers continuar„o rodando em segundo plano).
 PAUSE
