@@ -1,6 +1,11 @@
 @echo off
 setlocal EnableExtensions
 chcp 65001 >nul
+
+rem ===== /NOPAUSE precisa vir antes do goto :main =====
+set "NOPAUSE="
+if /I "%~1"=="/NOPAUSE" set "NOPAUSE=1"
+
 goto :main
 
 :: ========= utils =========
@@ -23,6 +28,11 @@ if "%~1"=="" (
   echo %*
 )
 endlocal & exit /b 0
+
+:maybe_pause
+if "%NOPAUSE%"=="1" exit /b 0
+pause
+exit /b 0
 
 :exec
 rem Uso: set "DESC=descricao"; call :exec comando arg1 arg2 ...
@@ -82,6 +92,9 @@ for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyy-MM-dd_HH-m
 set "LOG=%LOGDIR%\backup_%TS%.log"
 set "COMMIT_MSG=Backup do Ambiente de Dados - %TS%"
 
+rem limpeza de logs mais antigos que 30 dias
+forfiles /p "%LOGDIR%" /m *.log /d -30 /c "cmd /c del /q @path" >nul 2>&1
+
 rem boot marks (console + log)
 call :say [BOOT] batch started - %date% %time%
 call :say [BOOT] log file: "%LOG%"
@@ -120,7 +133,7 @@ call :say ==========================================================
 call :say Commit: "%COMMIT_MSG%"
 call :say Log: "%LOG%"
 call :say
-pause
+call :maybe_pause
 
 rem parar n8n/postgres/jupyter
 cd /d "%N8N%"
@@ -142,7 +155,7 @@ call :log
 call :say
 call :say All services are stopped.
 call :say
-pause
+call :maybe_pause
 
 rem git backup
 cd /d "%ROOT%"
@@ -181,7 +194,7 @@ call :say ERROR OCCURRED - see log:
 call :say %LOG%
 call :say ==========================================================
 call :say
-pause
+call :maybe_pause
 exit /b 1
 
 :end
@@ -195,5 +208,5 @@ call :say ==========================================================
 call :say BACKUP DONE AND ENV STOPPED
 call :say ==========================================================
 call :say
-pause
+call :maybe_pause
 exit /b 0
